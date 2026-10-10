@@ -52,13 +52,17 @@ export const viewport: Viewport = {
   // Inputs use 16px on touch devices (globals.css) and the scale is fixed.
   maximumScale: 1,
   userScalable: false,
-  viewportFit: "cover",
   themeColor: "#0a0a0a",
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en" className={`dark ${mono.variable}`} style={{ colorScheme: "dark" }}>
+      <head>
+        {/* Next.js only emits the newer mobile-web-app-capable tag. iOS
+            still keys standalone mode off the apple-prefixed one. */}
+        <meta name="apple-mobile-web-app-capable" content="yes" />
+      </head>
       <body>
         {children}
         <InsetDebug />
