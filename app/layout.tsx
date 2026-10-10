@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import { Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { InsetDebug } from "@/components/inset-debug";
+import { StandaloneViewport } from "@/components/standalone-viewport";
 
 // Geist Mono is the only font, as on zot.sh.
 const mono = Geist_Mono({
@@ -61,6 +62,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     <html lang="en" className={`dark ${mono.variable}`} style={{ colorScheme: "dark" }}>
       <body>
         {children}
+        <StandaloneViewport />
         <InsetDebug />
       </body>
     </html>

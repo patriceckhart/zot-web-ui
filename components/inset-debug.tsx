@@ -10,13 +10,13 @@ export function InsetDebug() {
     if (!new URLSearchParams(window.location.search).has("insets")) return;
     const probe = document.createElement("div");
     probe.style.cssText =
-      "position:fixed;visibility:hidden;padding-top:env(safe-area-inset-top);padding-bottom:env(safe-area-inset-bottom);margin-top:var(--top-inset)";
+      "position:fixed;visibility:hidden;padding-top:env(safe-area-inset-top);padding-bottom:env(safe-area-inset-bottom);margin-top:var(--top-inset);height:var(--app-height)";
     document.body.appendChild(probe);
     const update = () => {
       const cs = getComputedStyle(probe);
       const standalone = window.matchMedia("(display-mode: standalone)").matches;
       setInfo(
-        `top ${cs.paddingTop} bottom ${cs.paddingBottom} used ${cs.marginTop} standalone ${standalone} vh ${window.innerHeight} screen ${window.screen.height}`,
+        `top ${cs.paddingTop} bottom ${cs.paddingBottom} used ${cs.marginTop} app ${cs.height} standalone ${standalone} inner ${window.innerHeight} screen ${window.screen.height}`,
       );
     };
     update();
