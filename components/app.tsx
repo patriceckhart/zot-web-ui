@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { FolderOpen, LogOut, Menu, PanelLeftClose, Plus, Search, X } from "lucide-react";
+import { FolderOpen, LogOut, PanelLeftClose, PanelLeftOpen, Plus, Search, X } from "lucide-react";
 import { HostClient } from "@/lib/client";
 import type { Conversation, ConversationSnapshot, HostModel, RuntimeStatus, Submission } from "@/lib/protocol";
 import { buildItems, formatTokens, isBusy, shortPath } from "@/lib/conversation";
@@ -261,10 +261,11 @@ function Workspace({ client, host, status, onDisconnect }: WorkspaceProps) {
             title={conversations.find((c) => c.id === active) ? title(conversations.find((c) => c.id === active)!) : active.slice(0, 8)}
             attachments={!!status?.capabilities?.attachments}
             models={!!status?.capabilities?.models}
+            sidebarOpen={sidebar}
             onMenu={() => setSidebar((s) => !s)}
           />
         ) : (
-          <Landing onMenu={() => setSidebar((s) => !s)} onOpen={open} />
+          <Landing sidebarOpen={sidebar} onMenu={() => setSidebar((s) => !s)} onOpen={open} />
         )}
       </main>
     </div>
@@ -308,15 +309,13 @@ function NewSession({ onOpen, onCancel }: { onOpen: (w: string) => Promise<void>
   );
 }
 
-function Landing({ onMenu, onOpen }: { onMenu: () => void; onOpen: (w: string) => Promise<void> }) {
+function Landing({ sidebarOpen, onMenu, onOpen }: { sidebarOpen: boolean; onMenu: () => void; onOpen: (w: string) => Promise<void> }) {
   const [workspace, setWorkspace] = useState("main");
   const [error, setError] = useState("");
   return (
     <div className="flex h-full flex-col">
-      <header className="flex items-center px-4 py-3">
-        <button className="rounded p-1 text-muted-foreground hover:text-foreground" aria-label="Menu" onClick={onMenu}>
-          <Menu className="h-5 w-5" />
-        </button>
+      <header className="flex h-[57px] items-center px-4">
+        <SidebarToggle open={sidebarOpen} onClick={onMenu} />
       </header>
       <div className="flex flex-1 flex-col items-center justify-center gap-6 px-6">
         <AnimatedZ width={72} height={72} />
@@ -345,7 +344,7 @@ function Landing({ onMenu, onOpen }: { onMenu: () => void; onOpen: (w: string) =
   );
 }
 
-function ChatView({ client, id, title, attachments, models, onMenu }: { client: HostClient; id: string; title: string; attachments: boolean; models: boolean; onMenu: () => void }) {
+function ChatView({ client, id, title, attachments, models, sidebarOpen, onMenu }: { client: HostClient; id: string; title: string; attachments: boolean; models: boolean; sidebarOpen: boolean; onMenu: () => void }) {
   const { state, error } = useConversation(client, id);
   const [actionError, setActionError] = useState("");
   const [modelOpen, setModelOpen] = useState(false);
@@ -394,9 +393,7 @@ function ChatView({ client, id, title, attachments, models, onMenu }: { client: 
   return (
     <div className="flex h-full flex-col">
       <header className="flex items-center gap-3 border-b border-border px-4 py-3">
-        <button className="rounded p-1 text-muted-foreground hover:text-foreground" aria-label="Menu" onClick={onMenu}>
-          <Menu className="h-5 w-5" />
-        </button>
+        <SidebarToggle open={sidebarOpen} onClick={onMenu} />
         <div className="min-w-0 flex-1">
           <div className="truncate font-mono text-sm font-medium">{shortPath(title)}</div>
           <div className="truncate text-xs text-muted-foreground">
@@ -517,4 +514,18 @@ function Highlight({ text, needle }: { text: string; needle: string }) {
 
 function plural(n: number, noun: string): string {
   return `${n} ${noun}${n === 1 ? "" : "s"}`;
+}
+
+// SidebarToggle opens the sidebar. On desktop it is hidden while the sidebar
+// is open, because the sidebar has its own close button in the same row.
+function SidebarToggle({ open, onClick }: { open: boolean; onClick: () => void }) {
+  return (
+    <button
+      className={`rounded p-1 text-muted-foreground hover:text-foreground ${open ? "md:hidden" : ""}`}
+      aria-label="Show sidebar"
+      onClick={onClick}
+    >
+      <PanelLeftOpen className="h-4 w-4" />
+    </button>
+  );
 }
