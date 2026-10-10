@@ -17,13 +17,13 @@ type Props = {
 
 export function ConnectScreen({ hosts, error, connecting, onConnect, onSave }: Props) {
   const [adding, setAdding] = useState(hosts.length === 0);
-  const [name, setName] = useState("My Mac");
-  const [url, setUrl] = useState("wss://");
+  const [name, setName] = useState("");
+  const [url, setUrl] = useState("");
   const [token, setToken] = useState("");
 
   const submit = (e: React.FormEvent) => {
     e.preventDefault();
-    const host: HostProfile = { id: newID(), name: name.trim() || url, url: url.trim(), token: token.trim() };
+    const host: HostProfile = { id: newID(), name: name.trim() || "Local", url: url.trim(), token: token.trim() };
     onSave([...hosts, host]);
     setAdding(false);
     setToken("");
@@ -64,13 +64,13 @@ export function ConnectScreen({ hosts, error, connecting, onConnect, onSave }: P
         {adding ? (
           <form onSubmit={submit} className="space-y-4">
             <Field label="Name">
-              <input className={inputClass} value={name} onChange={(e) => setName(e.target.value)} />
+              <input className={inputClass} value={name} onChange={(e) => setName(e.target.value)} placeholder="Local" />
             </Field>
             <Field label="Host URL">
-              <input className={`${inputClass} font-mono`} value={url} onChange={(e) => setUrl(e.target.value)} placeholder="wss://zot.example.ts.net" required />
+              <input className={`${inputClass} font-mono`} value={url} onChange={(e) => setUrl(e.target.value)} placeholder="https:// or wss://" required />
             </Field>
             <Field label="Token">
-              <input className={`${inputClass} font-mono`} type="password" autoComplete="off" value={token} onChange={(e) => setToken(e.target.value)} required minLength={16} />
+              <input className={`${inputClass} font-mono`} type="password" autoComplete="off" placeholder="Token" value={token} onChange={(e) => setToken(e.target.value)} required minLength={16} />
             </Field>
             <p className="text-xs leading-relaxed text-muted-foreground">
               Hosts and tokens are kept in this tab&apos;s session storage only. They are cleared when the browser session ends and are sent only to the host you enter.
