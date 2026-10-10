@@ -7,16 +7,31 @@ import { useEffect, useState } from "react";
 const FRAMES = ["⠋", "⠙", "⠚", "⠞", "⠖", "⠦", "⠴", "⠲", "⠳", "⠓"];
 const INTERVAL_MS = 120;
 
-export function WorkingSpinner({ label = "working" }: { label?: string }) {
+function useFrame(): string {
   const [frame, setFrame] = useState(0);
   useEffect(() => {
     const t = setInterval(() => setFrame((f) => (f + 1) % FRAMES.length), INTERVAL_MS);
     return () => clearInterval(t);
   }, []);
+  return FRAMES[frame];
+}
+
+// SpinnerGlyph is the bare spinner, for inline use.
+export function SpinnerGlyph() {
+  const glyph = useFrame();
+  return (
+    <span className="inline-block w-[1.2em] text-center leading-none" aria-hidden="true">
+      {glyph}
+    </span>
+  );
+}
+
+export function WorkingSpinner({ label = "working" }: { label?: string }) {
+  const glyph = useFrame();
   return (
     <div className="flex items-center gap-2 text-sm text-muted-foreground" role="status" aria-live="polite">
       <span className="inline-block w-[1.2em] text-center text-xl leading-none text-zot" aria-hidden="true">
-        {FRAMES[frame]}
+        {glyph}
       </span>
       <span>{label}</span>
     </div>

@@ -24,6 +24,8 @@ import { ApprovalBar } from "./approvals";
 import { ModelDialog } from "./model-dialog";
 import { WorkingSpinner } from "./working-spinner";
 import { useConversationSearch } from "@/lib/use-search";
+import { activityOf, useActivity, type Activity } from "@/lib/use-activity";
+import { ActivityBadge } from "./activity-badge";
 
 const REASONING = ["off", "minimum", "low", "medium", "high", "xhigh", "max"];
 
@@ -107,6 +109,8 @@ function Workspace({ client, host, status, onDisconnect }: WorkspaceProps) {
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [labels, setLabels] = useState<Record<string, string>>({});
   const [active, setActive] = useState<string | null>(null);
+  // Live state of the open chat, reported by ChatView from its watch.
+  const [liveActivity, setLiveActivity] = useState<{ id: string; activity: Activity } | null>(null);
   const [sidebar, setSidebar] = useState(true);
   const [filter, setFilter] = useState("");
   const [creating, setCreating] = useState(false);
@@ -156,6 +160,8 @@ function Workspace({ client, host, status, onDisconnect }: WorkspaceProps) {
   const roots = conversations.filter((c) => !c.owner);
   const owned = conversations.filter((c) => c.owner);
   const search = useConversationSearch(client, conversations, filter);
+  const polled = useActivity(client, conversations);
+  const activityFor = (id: string): Activity | undefined => (liveActivity?.id === id ? liveActivity.activity : polled[id]);
   // Name matches are found locally; content matches come from the host.
   const q = filter.trim().toLowerCase();
   const nameMatches = search.active ? conversations.filter((c) => title(c).toLowerCase().includes(q) && !search.matches.some((m) => m.conversation.id === c.id)) : [];
@@ -213,6 +219,7 @@ function Workspace({ client, host, status, onDisconnect }: WorkspaceProps) {
                   <span className="flex items-center gap-2 text-[0.8rem]">
                     <FolderOpen className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
                     <span className="min-w-0 flex-1 truncate">{shortPath(title(m.conversation))}</span>
+                    <ActivityBadge activity={activityFor(m.conversation.id)} />
                     <span className="shrink-0 text-xs text-zot">
                       {m.count}
                       {m.more ? "+" : ""}
@@ -224,17 +231,17 @@ function Workspace({ client, host, status, onDisconnect }: WorkspaceProps) {
                 </button>
               ))}
               {nameMatches.map((c) => (
-                <SessionRow key={c.id} c={c} title={title(c)} active={active === c.id} onClick={() => pick(c.id)} />
+                <SessionRow key={c.id} c={c} title={title(c)} activity={activityFor(c.id)} active={active === c.id} onClick={() => pick(c.id)} />
               ))}
             </>
           ) : (
-            roots.map((c) => <SessionRow key={c.id} c={c} title={title(c)} active={active === c.id} onClick={() => pick(c.id)} />)
+            roots.map((c) => <SessionRow key={c.id} c={c} title={title(c)} activity={activityFor(c.id)} active={active === c.id} onClick={() => pick(c.id)} />)
           )}
           {!search.active && owned.length > 0 && (
             <>
               <div className="mt-4 px-2 pb-1 text-xs text-muted-foreground">Subagents</div>
               {owned.map((c) => (
-                <SessionRow key={c.id} c={c} title={title(c)} active={active === c.id} onClick={() => setActive(c.id)} />
+                <SessionRow key={c.id} c={c} title={title(c)} activity={activityFor(c.id)} active={active === c.id} onClick={() => setActive(c.id)} />
               ))}
             </>
           )}
@@ -263,6 +270,7 @@ function Workspace({ client, host, status, onDisconnect }: WorkspaceProps) {
             models={!!status?.capabilities?.models}
             sidebarOpen={sidebar}
             onMenu={() => setSidebar((s) => !s)}
+            onActivity={setLiveActivity}
           />
         ) : (
           <Landing sidebarOpen={sidebar} onMenu={() => setSidebar((s) => !s)} onOpen={open} />
@@ -272,7 +280,7 @@ function Workspace({ client, host, status, onDisconnect }: WorkspaceProps) {
   );
 }
 
-function SessionRow({ c, title, active, onClick }: { c: Conversation; title: string; active: boolean; onClick: () => void }) {
+function SessionRow({ c, title, activity, active, onClick }: { c: Conversation; title: string; activity?: Activity; active: boolean; onClick: () => void }) {
   return (
     <button onClick={onClick} className={`flex w-full flex-col rounded-md px-2 py-2 text-left ${active ? "rule-l bg-accent" : "border-l-2 border-transparent hover:bg-accent/60"}`}>
       <span className="flex items-center gap-2 text-sm">
@@ -281,7 +289,7 @@ function SessionRow({ c, title, active, onClick }: { c: Conversation; title: str
       </span>
       <span className="mt-0.5 flex gap-2 pl-5.5 text-xs text-muted-foreground">
         <span className="truncate">{c.config.model || "default model"}</span>
-        <span className="ml-auto shrink-0">{relativeTime(c.created)}</span>
+        <span className="ml-auto shrink-0">{activity && activity !== "idle" ? <ActivityBadge activity={activity} /> : relativeTime(c.created)}</span>
       </span>
     </button>
   );
@@ -344,7 +352,7 @@ function Landing({ sidebarOpen, onMenu, onOpen }: { sidebarOpen: boolean; onMenu
   );
 }
 
-function ChatView({ client, id, title, attachments, models, sidebarOpen, onMenu }: { client: HostClient; id: string; title: string; attachments: boolean; models: boolean; sidebarOpen: boolean; onMenu: () => void }) {
+function ChatView({ client, id, title, attachments, models, sidebarOpen, onMenu, onActivity }: { client: HostClient; id: string; title: string; attachments: boolean; models: boolean; sidebarOpen: boolean; onMenu: () => void; onActivity: (a: { id: string; activity: Activity } | null) => void }) {
   const { state, error } = useConversation(client, id);
   const [actionError, setActionError] = useState("");
   const [modelOpen, setModelOpen] = useState(false);
@@ -352,6 +360,11 @@ function ChatView({ client, id, title, attachments, models, sidebarOpen, onMenu 
   const pinned = useRef(true);
   const items = useMemo(() => (state ? buildItems(state) : []), [state]);
   const busy = state ? isBusy(state) : false;
+  const liveActivity = state ? activityOf({ chain: state.chain, approvals: [...state.approvals.values()], queue: [...state.queue.values()] }) : null;
+  useEffect(() => {
+    onActivity(liveActivity ? { id, activity: liveActivity } : null);
+  }, [id, liveActivity, onActivity]);
+  useEffect(() => () => onActivity(null), [onActivity]);
   const canAbort = client.role === "admin";
   const canSubmit = client.role !== "read";
   const provider = state?.config.provider;
