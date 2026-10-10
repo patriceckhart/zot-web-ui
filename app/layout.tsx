@@ -47,6 +47,10 @@ export const metadata: Metadata = {
 export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
+  // iOS zooms into focused inputs and keeps the page zoomed afterwards.
+  // Inputs use 16px on touch devices (globals.css) and the scale is fixed.
+  maximumScale: 1,
+  userScalable: false,
   viewportFit: "cover",
   themeColor: "#0a0a0a",
 };

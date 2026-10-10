@@ -65,7 +65,7 @@ export function ModelDialog({ config, reasoningLevels, loadModels, onClose, onSa
 
   return (
     <div className="fixed inset-0 z-40 flex items-end justify-center bg-black/60 sm:items-center" onClick={onClose}>
-      <div className="flex max-h-[90dvh] w-full max-w-md flex-col border border-border bg-background p-5" onClick={(e) => e.stopPropagation()}>
+      <div className="flex max-h-[90dvh] w-full max-w-md flex-col border border-border bg-background p-5 pb-[max(1.25rem,env(safe-area-inset-bottom))]" onClick={(e) => e.stopPropagation()}>
         <div className="mb-4 flex items-center">
           <h2 className="flex-1 font-medium lowercase">session settings</h2>
           <button aria-label="Close" onClick={onClose} className="text-muted-foreground hover:text-foreground">

@@ -31,7 +31,7 @@ export function ConnectScreen({ hosts, error, connecting, onConnect, onSave }: P
   };
 
   return (
-    <main className="flex min-h-full items-center justify-center p-6">
+    <main className="flex min-h-dvh items-center justify-center px-6 pt-[max(1.5rem,env(safe-area-inset-top))] pb-[max(1.5rem,env(safe-area-inset-bottom))]">
       <div className="w-full max-w-md">
         <div className="mb-12 flex justify-center">
           <AnimatedZ width={72} height={72} />
