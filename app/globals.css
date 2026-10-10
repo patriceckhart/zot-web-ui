@@ -1,0 +1,160 @@
+@import "tailwindcss";
+@plugin "@tailwindcss/typography";
+
+@custom-variant dark (&:is(.dark *));
+
+/* Locked to dark mode. */
+/* zot.sh design: Geist Mono only, cyan accent, sharp corners. */
+@theme inline {
+  --font-sans: var(--font-geist-mono), ui-monospace, monospace;
+  --font-mono: var(--font-geist-mono), ui-monospace, monospace;
+  --color-zot: var(--zot);
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-primary: var(--zot);
+  --color-primary-foreground: oklch(0.145 0 0);
+  --color-secondary: var(--secondary);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-destructive: var(--destructive);
+  --color-success: var(--success);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-sidebar: var(--sidebar);
+  --radius-xs: 0rem;
+  --radius-sm: 0rem;
+  --radius: 0rem;
+  --radius-md: 0rem;
+  --radius-lg: 0rem;
+  --radius-xl: 0rem;
+}
+
+:root,
+.dark {
+  --zot: oklch(0.8374 0.1129 222.74);
+  --background: oklch(0.145 0 0);
+  --foreground: oklch(0.985 0 0);
+  --card: oklch(0.205 0 0);
+  --secondary: oklch(0.269 0 0);
+  --muted: oklch(0.269 0 0);
+  --muted-foreground: oklch(0.708 0 0);
+  --accent: oklch(0.269 0 0);
+  --destructive: oklch(0.704 0.191 22.216);
+  --success: oklch(0.8 0.15 150);
+  --border: oklch(1 0 0 / 10%);
+  --input: oklch(1 0 0 / 15%);
+  --sidebar: oklch(0.165 0 0);
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  html,
+  body {
+    height: 100%;
+  }
+  html {
+    @apply font-mono text-[15px];
+  }
+  body {
+    @apply bg-background text-foreground antialiased;
+  }
+}
+
+::-webkit-scrollbar { width: 0.25rem; height: 0.25rem; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { @apply bg-zot; }
+::selection { @apply bg-zot text-black; }
+
+/* Large mono headline, as on zot.sh. */
+.display {
+  font-weight: 500;
+  letter-spacing: -0.04em;
+  line-height: 1.04;
+}
+
+.dotted-link {
+  text-decoration: underline dotted;
+  text-underline-offset: 4px;
+  text-decoration-color: var(--muted-foreground);
+}
+
+/* Cyan left rule marking the active sidebar row. */
+.rule-l {
+  @apply border-l-2 border-zot;
+}
+
+.prose-zot {
+  @apply prose prose-sm prose-invert max-w-none;
+  --tw-prose-body: var(--foreground);
+  --tw-prose-invert-body: var(--foreground);
+  --tw-prose-bold: var(--foreground);
+  --tw-prose-invert-bold: var(--foreground);
+  --tw-prose-headings: var(--foreground);
+  --tw-prose-invert-headings: var(--foreground);
+  --tw-prose-bullets: var(--zot);
+  --tw-prose-invert-bullets: var(--zot);
+  --tw-prose-counters: var(--zot);
+  --tw-prose-invert-counters: var(--zot);
+  font-size: 0.9rem;
+  line-height: 1.7;
+}
+.prose-zot a {
+  color: var(--zot);
+  text-decoration-color: var(--zot);
+  text-underline-offset: 4px;
+}
+.prose-zot a:hover {
+  text-decoration-line: none;
+}
+.prose-zot strong {
+  @apply font-medium text-foreground;
+}
+.prose-zot :where(code):not(:where(pre *)) {
+  @apply bg-foreground/[0.06] px-1 py-[1px] text-[0.95em] font-normal text-zot;
+}
+.prose-zot :where(code):not(:where(pre *))::before,
+.prose-zot :where(code):not(:where(pre *))::after {
+  content: none;
+}
+.prose-zot pre {
+  @apply text-[0.8rem] text-foreground;
+  border-radius: 0;
+}
+.prose-zot .shiki-wrap pre,
+.prose-zot pre.shiki-wrap {
+  border: 0;
+  padding: 0;
+  background: transparent;
+}
+
+/* Shiki output: transparent background so blocks use the card surface. */
+.shiki-wrap pre,
+pre.shiki-wrap {
+  margin: 0;
+  background: transparent !important;
+  white-space: pre;
+}
+.shiki-wrap code {
+  font-family: var(--font-mono);
+  counter-reset: line;
+}
+.shiki-wrap.wrap pre,
+pre.shiki-wrap.wrap {
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+/* Line numbers for file views. */
+.shiki-wrap.numbered .line::before {
+  counter-increment: line;
+  content: counter(line);
+  display: inline-block;
+  width: 2.5rem;
+  margin-right: 1rem;
+  text-align: right;
+  color: var(--muted-foreground);
+  opacity: 0.5;
+}
