@@ -20,7 +20,7 @@ export const metadata: Metadata = {
   applicationName: "zot",
   // Connection details are private; the client is not meant for indexing.
   robots: { index: false, follow: false },
-  appleWebApp: { capable: true, title: "zot", statusBarStyle: "black-translucent" },
+  appleWebApp: { capable: true, title: "zot", statusBarStyle: "black" },
   openGraph: {
     type: "website",
     url: SITE_URL,
