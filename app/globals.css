@@ -176,24 +176,8 @@ body {
   -webkit-text-size-adjust: 100%;
 }
 
-/* Layout height and top inset.
-   Browser tab: the dynamic viewport, and the reported top inset.
-   Installed iOS app: the whole screen (100lvh). iOS lays the page out in
-   the area below the status bar but draws it from the top of the screen,
-   so a dvh-sized shell is too short (empty band at the bottom) and starts
-   under the status bar. Some iOS versions also report the top inset as 0
-   there, so it gets a floor that clears the status bar of current iPhones. */
+/* The shell always matches the viewport the device reports. Safe-area
+   insets come from the device; there are no hard-coded sizes. */
 :root {
-  --app-height: 100dvh;
   --top-inset: env(safe-area-inset-top, 0px);
-}
-@media (display-mode: standalone) and (hover: none) and (pointer: coarse) {
-  :root {
-    --app-height: 100lvh;
-    --top-inset: max(env(safe-area-inset-top, 0px), 54px);
-  }
-}
-.app-shell {
-  height: var(--app-height);
-  min-height: var(--app-height);
 }

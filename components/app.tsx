@@ -165,7 +165,7 @@ function Workspace({ client, host, status, onDisconnect }: WorkspaceProps) {
   };
 
   return (
-    <div className="app-shell fixed inset-x-0 top-0 flex overflow-hidden pr-[env(safe-area-inset-right)]">
+    <div className="fixed inset-0 flex overflow-hidden pr-[env(safe-area-inset-right)]">
       {sidebar && <div className="fixed inset-0 z-20 bg-black/50 md:hidden" onClick={() => setSidebar(false)} />}
       <aside
         className={`fixed inset-y-0 left-0 z-30 flex w-[calc(18rem+env(safe-area-inset-left))] max-w-[85vw] flex-col border-r border-border bg-sidebar pt-[var(--top-inset)] pl-[env(safe-area-inset-left)] transition-transform md:static md:z-auto ${sidebar ? "translate-x-0" : "-translate-x-full md:hidden"}`}
