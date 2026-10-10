@@ -52,6 +52,11 @@ export const viewport: Viewport = {
   // Inputs use 16px on touch devices (globals.css) and the scale is fixed.
   maximumScale: 1,
   userScalable: false,
+  // Needed for env(safe-area-inset-*) to report real values; without it
+  // the bottom inset is 0 and the footer runs into the rounded corners and
+  // home indicator. With the opaque status bar the top inset stays 0, so
+  // the page still starts below the status bar.
+  viewportFit: "cover",
   themeColor: "#0a0a0a",
 };
 
