@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { Geist_Mono } from "next/font/google";
 import "./globals.css";
+import { InsetDebug } from "@/components/inset-debug";
 
 // Geist Mono is the only font, as on zot.sh.
 const mono = Geist_Mono({
@@ -20,7 +21,7 @@ export const metadata: Metadata = {
   applicationName: "zot",
   // Connection details are private; the client is not meant for indexing.
   robots: { index: false, follow: false },
-  appleWebApp: { capable: true, title: "zot", statusBarStyle: "black" },
+  appleWebApp: { capable: true, title: "zot", statusBarStyle: "black-translucent" },
   openGraph: {
     type: "website",
     url: SITE_URL,
@@ -58,7 +59,10 @@ export const viewport: Viewport = {
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en" className={`dark ${mono.variable}`} style={{ colorScheme: "dark" }}>
-      <body>{children}</body>
+      <body>
+        {children}
+        <InsetDebug />
+      </body>
     </html>
   );
 }

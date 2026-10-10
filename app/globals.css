@@ -175,3 +175,16 @@ body {
   overscroll-behavior: none;
   -webkit-text-size-adjust: 100%;
 }
+
+/* Installed iOS web app. Some iOS versions report safe-area-inset-top as 0
+   in standalone mode, which lets the header slide under the status bar.
+   --top-inset is the larger of the reported inset and a floor that clears
+   the status bar of current iPhones. */
+:root {
+  --top-inset: env(safe-area-inset-top, 0px);
+}
+@media (display-mode: standalone) and (hover: none) and (pointer: coarse) {
+  :root {
+    --top-inset: max(env(safe-area-inset-top, 0px), 54px);
+  }
+}

@@ -168,7 +168,7 @@ function Workspace({ client, host, status, onDisconnect }: WorkspaceProps) {
     <div className="fixed inset-0 flex overflow-hidden pr-[env(safe-area-inset-right)]">
       {sidebar && <div className="fixed inset-0 z-20 bg-black/50 md:hidden" onClick={() => setSidebar(false)} />}
       <aside
-        className={`fixed inset-y-0 left-0 z-30 flex w-[calc(18rem+env(safe-area-inset-left))] max-w-[85vw] flex-col border-r border-border bg-sidebar pt-[env(safe-area-inset-top)] pl-[env(safe-area-inset-left)] transition-transform md:static md:z-auto ${sidebar ? "translate-x-0" : "-translate-x-full md:hidden"}`}
+        className={`fixed inset-y-0 left-0 z-30 flex w-[calc(18rem+env(safe-area-inset-left))] max-w-[85vw] flex-col border-r border-border bg-sidebar pt-[var(--top-inset)] pl-[env(safe-area-inset-left)] transition-transform md:static md:z-auto ${sidebar ? "translate-x-0" : "-translate-x-full md:hidden"}`}
       >
         <div className="flex items-center gap-2 px-4 py-4">
           <AnimatedZ width={24} height={24} />
@@ -314,7 +314,7 @@ function Landing({ sidebarOpen, onMenu, onOpen }: { sidebarOpen: boolean; onMenu
   const [error, setError] = useState("");
   return (
     <div className="flex h-full flex-col">
-      <header className="flex min-h-[57px] items-center px-4 pt-[env(safe-area-inset-top)]">
+      <header className="flex min-h-[57px] items-center px-4 pt-[var(--top-inset)]">
         <SidebarToggle open={sidebarOpen} onClick={onMenu} />
       </header>
       <div className="flex flex-1 flex-col items-center justify-center gap-6 px-6">
@@ -392,7 +392,7 @@ function ChatView({ client, id, title, attachments, models, sidebarOpen, onMenu 
 
   return (
     <div className="flex h-full flex-col">
-      <header className="flex items-center gap-3 border-b border-border px-4 pb-3 pt-[max(0.75rem,env(safe-area-inset-top))]">
+      <header className="flex items-center gap-3 border-b border-border px-4 pb-3 pt-[max(0.75rem,var(--top-inset))]">
         <SidebarToggle open={sidebarOpen} onClick={onMenu} />
         <div className="min-w-0 flex-1">
           <div className="truncate font-mono text-sm font-medium">{shortPath(title)}</div>
