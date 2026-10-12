@@ -1,15 +1,16 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
-import { Check, Search, X } from "lucide-react";
+import { useEffect, useId, useMemo, useReducer, useRef, useState } from "react";
+import { Check, ChevronDown, ChevronUp, Search, X } from "lucide-react";
 import type { AgentConfig, HostModel } from "@/lib/protocol";
 import { formatTokens } from "@/lib/conversation";
+import { filterModels, matchesModel, modelPickerReducer, uniqueModels } from "@/lib/model-selection";
 
 type Props = {
   config: AgentConfig;
   reasoningLevels: string[];
-  // loadModels lists the host catalog for the conversation's provider. It is
-  // undefined for hosts without model.list; the model is then typed in.
+  // New hosts list models across usable providers. Older hosts list only the
+  // current provider, or accept a typed model when model.list is unavailable.
   loadModels?: () => Promise<HostModel[]>;
   onClose: () => void;
   onSave: (config: AgentConfig) => Promise<void>;
@@ -17,7 +18,11 @@ type Props = {
 };
 
 export function ModelDialog({ config, reasoningLevels, loadModels, onClose, onSave, onCompact }: Props) {
-  const [model, setModel] = useState(config.model);
+  const [{ model, provider, open: pickerOpen }, dispatchPicker] = useReducer(modelPickerReducer, {
+    model: config.model, provider: config.provider, open: true,
+  });
+  const pickerID = useId();
+  const pickerButton = useRef<HTMLButtonElement>(null);
   const [reasoning, setReasoning] = useState(config.reasoning || "off");
   const [instructions, setInstructions] = useState(config.instructions ?? "");
   const [models, setModels] = useState<HostModel[] | null>(null);
@@ -30,25 +35,24 @@ export function ModelDialog({ config, reasoningLevels, loadModels, onClose, onSa
     if (!loadModels) return;
     let cancelled = false;
     loadModels()
-      .then((list) => !cancelled && setModels(list))
+      .then((list) => !cancelled && setModels(uniqueModels(list, config.provider)))
       .catch((err) => !cancelled && setError((err as Error).message));
     return () => {
       cancelled = true;
     };
-  }, [loadModels]);
+  }, [loadModels, config.provider]);
 
   // Bring the current model into view once the catalog has loaded.
   useEffect(() => {
-    listRef.current?.querySelector('[aria-selected="true"]')?.scrollIntoView({ block: "nearest" });
-  }, [models]);
+    if (pickerOpen) listRef.current?.querySelector('[aria-selected="true"]')?.scrollIntoView({ block: "nearest" });
+  }, [models, pickerOpen]);
 
   const filtered = useMemo(() => {
     if (!models) return [];
-    const q = query.trim().toLowerCase();
-    return q ? models.filter((m) => m.id.toLowerCase().includes(q) || m.display_name?.toLowerCase().includes(q)) : models;
+    return filterModels(models, query);
   }, [models, query]);
 
-  const selected = models?.find((m) => m.id === model);
+  const selected = models?.find((m) => matchesModel(m, provider, model));
   const supportsReasoning = selected ? selected.reasoning : true;
 
   const run = async (fn: () => Promise<void>) => {
@@ -74,44 +78,65 @@ export function ModelDialog({ config, reasoningLevels, loadModels, onClose, onSa
         </div>
         <div className="min-h-0 flex-1 space-y-4 overflow-y-auto text-sm">
           <div className="text-xs text-muted-foreground">
-            Provider <span className="text-foreground">{config.provider || "host default"}</span>
+            Provider <span className="text-foreground">{provider || "host default"}</span>
           </div>
 
           <div>
             <span className="mb-1 block text-xs text-muted-foreground">Model</span>
             {loadModels ? (
               <div className="border border-input">
-                <label className="flex items-center gap-2 border-b border-input px-3 py-2">
-                  <Search className="h-3.5 w-3.5 text-muted-foreground" />
-                  <input
-                    value={query}
-                    onChange={(e) => setQuery(e.target.value)}
-                    placeholder="Search models"
-                    className="w-full bg-transparent outline-none placeholder:text-muted-foreground"
-                  />
-                </label>
-                <ul ref={listRef} role="listbox" aria-label="Models" className="max-h-56 overflow-y-auto">
-                  {!models && !error && <li className="px-3 py-2 text-xs text-muted-foreground">Loading models...</li>}
-                  {models && filtered.length === 0 && <li className="px-3 py-2 text-xs text-muted-foreground">No matching models.</li>}
-                  {filtered.map((m) => (
-                    <li key={m.id}>
-                      <button
-                        role="option"
-                        aria-selected={m.id === model}
-                        onClick={() => setModel(m.id)}
-                        className={`flex w-full items-center gap-2 border-l-2 px-3 py-1.5 text-left ${m.id === model ? "border-zot bg-accent text-foreground" : "border-transparent hover:bg-accent/60"}`}
-                      >
-                        <span className="min-w-0 flex-1 truncate">{m.id}</span>
-                        {m.reasoning && <span className="shrink-0 text-[0.7rem] text-muted-foreground">reasoning</span>}
-                        {m.context_window ? <span className="w-10 shrink-0 text-right text-[0.7rem] text-muted-foreground">{formatTokens(m.context_window)}</span> : null}
-                        {m.id === model && <Check className="h-3.5 w-3.5 shrink-0 text-zot" />}
-                      </button>
-                    </li>
-                  ))}
-                </ul>
+                <button
+                  ref={pickerButton}
+                  aria-label="Choose model"
+                  aria-expanded={pickerOpen}
+                  aria-controls={pickerID}
+                  aria-haspopup="listbox"
+                  onClick={() => dispatchPicker({ type: "toggle" })}
+                  className="flex w-full items-center gap-2 px-3 py-2 text-left hover:bg-accent/60"
+                >
+                  <span className="min-w-0 flex-1 truncate">{model || "Choose a model"}</span>
+                  {pickerOpen ? <ChevronUp className="h-3.5 w-3.5 shrink-0" /> : <ChevronDown className="h-3.5 w-3.5 shrink-0" />}
+                </button>
+                <div hidden={!pickerOpen}>
+                  <label className="flex items-center gap-2 border-y border-input px-3 py-2">
+                    <Search className="h-3.5 w-3.5 text-muted-foreground" />
+                    <input
+                      value={query}
+                      onChange={(e) => setQuery(e.target.value)}
+                      placeholder="Search models"
+                      className="w-full bg-transparent outline-none placeholder:text-muted-foreground"
+                    />
+                  </label>
+                  <ul id={pickerID} ref={listRef} role="listbox" aria-label="Models" className="max-h-56 overflow-y-auto">
+                    {!models && !error && <li className="px-3 py-2 text-xs text-muted-foreground">Loading models...</li>}
+                    {models && filtered.length === 0 && <li className="px-3 py-2 text-xs text-muted-foreground">No matching models.</li>}
+                    {filtered.map((m) => (
+                      <li key={JSON.stringify([m.provider, m.id])}>
+                        <button
+                          role="option"
+                          aria-selected={matchesModel(m, provider, model)}
+                          onClick={() => {
+                            dispatchPicker({ type: "select", model: m });
+                            setQuery("");
+                            pickerButton.current?.focus();
+                          }}
+                          className={`flex w-full items-center gap-2 border-l-2 px-3 py-1.5 text-left ${matchesModel(m, provider, model) ? "border-zot bg-accent text-foreground" : "border-transparent hover:bg-accent/60"}`}
+                        >
+                          <span className="min-w-0 flex-1">
+                            <span className="block truncate">{m.id}</span>
+                            {m.provider && <span className="block truncate text-[0.7rem] text-muted-foreground">{m.provider}</span>}
+                          </span>
+                          {m.reasoning && <span className="shrink-0 text-[0.7rem] text-muted-foreground">reasoning</span>}
+                          {m.context_window ? <span className="w-10 shrink-0 text-right text-[0.7rem] text-muted-foreground">{formatTokens(m.context_window)}</span> : null}
+                          {matchesModel(m, provider, model) && <Check className="h-3.5 w-3.5 shrink-0 text-zot" />}
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
               </div>
             ) : (
-              <input value={model} onChange={(e) => setModel(e.target.value)} className="w-full border border-input bg-background px-3 py-2 outline-none focus:border-zot" />
+              <input value={model} onChange={(e) => dispatchPicker({ type: "input", model: e.target.value })} className="w-full border border-input bg-background px-3 py-2 outline-none focus:border-zot" />
             )}
             {models && !selected && model && <p className="mt-1 text-xs text-muted-foreground">Current model {model} is not in the host catalog.</p>}
           </div>
@@ -144,8 +169,9 @@ export function ModelDialog({ config, reasoningLevels, loadModels, onClose, onSa
               run(() =>
                 onSave({
                   ...config,
+                  provider,
                   model: model.trim(),
-                  reasoning: !supportsReasoning || reasoning === "off" ? "" : reasoning,
+                  reasoning: !supportsReasoning ? "off" : reasoning,
                   instructions: instructions.trim() || undefined,
                 }),
               )

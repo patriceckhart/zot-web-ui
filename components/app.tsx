@@ -283,6 +283,7 @@ function Workspace({ client, host, status, onDisconnect }: WorkspaceProps) {
             title={conversations.find((c) => c.id === active) ? title(conversations.find((c) => c.id === active)!) : active.slice(0, 8)}
             attachments={!!status?.capabilities?.attachments}
             models={!!status?.capabilities?.models}
+            providers={!!status?.capabilities?.providers}
             sidebarOpen={sidebar}
             onMenu={() => setSidebar((s) => !s)}
             onActivity={setLiveActivity}
@@ -367,7 +368,7 @@ function Landing({ sidebarOpen, onMenu, onOpen }: { sidebarOpen: boolean; onMenu
   );
 }
 
-function ChatView({ client, id, title, attachments, models, sidebarOpen, onMenu, onActivity }: { client: HostClient; id: string; title: string; attachments: boolean; models: boolean; sidebarOpen: boolean; onMenu: () => void; onActivity: (a: { id: string; activity: Activity } | null) => void }) {
+function ChatView({ client, id, title, attachments, models, providers, sidebarOpen, onMenu, onActivity }: { client: HostClient; id: string; title: string; attachments: boolean; models: boolean; providers: boolean; sidebarOpen: boolean; onMenu: () => void; onActivity: (a: { id: string; activity: Activity } | null) => void }) {
   const { state, error } = useConversation(client, id);
   const [actionError, setActionError] = useState("");
   const [modelOpen, setModelOpen] = useState(false);
@@ -384,8 +385,8 @@ function ChatView({ client, id, title, attachments, models, sidebarOpen, onMenu,
   const canSubmit = client.role !== "read";
   const provider = state?.config.provider;
   const loadModels = useMemo(
-    () => (models ? () => client.call<{ models: HostModel[] }>("model.list", { provider }).then((r) => r.models ?? []) : undefined),
-    [client, models, provider],
+    () => (models ? () => client.call<{ models: HostModel[] }>("model.list", providers ? { available: true } : { provider }).then((r) => r.models ?? []) : undefined),
+    [client, models, provider, providers],
   );
 
   useEffect(() => {

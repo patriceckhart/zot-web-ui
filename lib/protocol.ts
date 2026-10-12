@@ -172,13 +172,14 @@ export type SearchResult = {
 
 export type RuntimeStatus = {
   version?: string;
-  capabilities?: { attachments?: boolean; models?: boolean };
+  capabilities?: { attachments?: boolean; models?: boolean; providers?: boolean };
   metrics?: Record<string, unknown>;
 };
 
 export type FileAttachment = { name: string; data: string };
 
 export type HostModel = {
+  provider?: string;
   id: string;
   display_name?: string;
   context_window?: number;

@@ -52,6 +52,27 @@ Open the UI, add the host URL and the web token, and open a workspace (for examp
 zot --continuous ~/.zot-store/host.sock --continuous-workspace main
 ```
 
+## Switching providers and models
+
+Open session settings by clicking the model in the chat header. With an updated
+continuous host, the picker lists models across providers configured on that
+host. Each row shows its provider, and search accepts provider names as well as
+model IDs. Selecting a model closes the dropdown. Click the selected model to
+reopen it. Session settings stay open so you can adjust reasoning and instructions,
+then click Save to apply the provider and model together without restarting the
+host or creating another conversation.
+
+Credentials stay on the host. Sign in there through zot's `/login`, set the
+provider's API key environment variable before starting the host, or configure
+its local/custom connection. Stored credential commands are not executed merely
+to populate the list. Invalid selections or credential failures are shown as
+errors without saving the new selection. Existing history is retained, and new
+requests use the saved provider. A request already in flight uses its original
+provider. Existing subagents keep their own selection.
+
+Older hosts retain their single-provider picker. Both the host binary and the web
+UI need updating to enable cross-provider selection.
+
 ## Subagents
 
 The sidebar nests subagent conversations under the conversation that created them,
@@ -77,7 +98,7 @@ host configuration changes.
 
 - The host stores workspace names hashed. Names opened in this browser session are remembered, other conversations show as `conversation <id>`.
 - The newest 400 entries of a conversation are loaded.
-- The model is entered as an ID. The host refuses providers other than the one it was started with.
+- The model picker uses the host's active catalog. It does not provide login flows or live model discovery controls. Older hosts only allow models from their configured provider.
 - No file browser or terminal panel. The host protocol does not expose them.
 
 ## Local development
