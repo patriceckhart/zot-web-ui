@@ -1,7 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { FolderOpen, LogOut, PanelLeftClose, PanelLeftOpen, Plus, Search, X } from "lucide-react";
+import { ChevronDown, ChevronRight, FolderOpen, LogOut, PanelLeftClose, PanelLeftOpen, Plus, Search, X } from "lucide-react";
+import { conversationRows } from "@/lib/conversation-tree";
 import { HostClient } from "@/lib/client";
 import type { Conversation, ConversationSnapshot, HostModel, RuntimeStatus, Submission } from "@/lib/protocol";
 import { buildItems, formatTokens, isBusy, shortPath } from "@/lib/conversation";
@@ -115,6 +116,7 @@ function Workspace({ client, host, status, onDisconnect }: WorkspaceProps) {
   const [filter, setFilter] = useState("");
   const [creating, setCreating] = useState(false);
   const [listError, setListError] = useState("");
+  const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
 
   const refresh = useCallback(async () => {
     try {
@@ -157,8 +159,15 @@ function Workspace({ client, host, status, onDisconnect }: WorkspaceProps) {
 
   const title = (c: Conversation) => labels[c.id] ?? (c.owner ? `subagent ${c.id.slice(0, 8)}` : c.parent ? `fork ${c.id.slice(0, 8)}` : `conversation ${c.id.slice(0, 8)}`);
 
-  const roots = conversations.filter((c) => !c.owner);
-  const owned = conversations.filter((c) => c.owner);
+  const rows = useMemo(() => conversationRows(conversations, collapsed), [conversations, collapsed]);
+  const toggleChildren = (id: string) => {
+    setCollapsed((current) => {
+      const next = new Set(current);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
   const search = useConversationSearch(client, conversations, filter);
   const polled = useActivity(client, conversations);
   const activityFor = (id: string): Activity | undefined => (liveActivity?.id === id ? liveActivity.activity : polled[id]);
@@ -235,17 +244,23 @@ function Workspace({ client, host, status, onDisconnect }: WorkspaceProps) {
               ))}
             </>
           ) : (
-            roots.map((c) => <SessionRow key={c.id} c={c} title={title(c)} activity={activityFor(c.id)} active={active === c.id} onClick={() => pick(c.id)} />)
+            rows.map(({ conversation: c, depth, hasChildren }) => (
+              <div key={c.id} className="flex items-start" style={{ marginLeft: Math.min(depth, 6) * 12 }}>
+                {hasChildren ? (
+                  <button
+                    className="mt-2 shrink-0 rounded p-1 text-muted-foreground hover:text-foreground"
+                    aria-label={`${collapsed.has(c.id) ? "Expand" : "Collapse"} subagents of ${title(c)}`}
+                    aria-expanded={!collapsed.has(c.id)}
+                    onClick={() => toggleChildren(c.id)}
+                  >
+                    {collapsed.has(c.id) ? <ChevronRight className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
+                  </button>
+                ) : <span className="w-5.5 shrink-0" />}
+                <SessionRow c={c} title={title(c)} activity={activityFor(c.id)} active={active === c.id} onClick={() => pick(c.id)} />
+              </div>
+            ))
           )}
-          {!search.active && owned.length > 0 && (
-            <>
-              <div className="mt-4 px-2 pb-1 text-xs text-muted-foreground">Subagents</div>
-              {owned.map((c) => (
-                <SessionRow key={c.id} c={c} title={title(c)} activity={activityFor(c.id)} active={active === c.id} onClick={() => setActive(c.id)} />
-              ))}
-            </>
-          )}
-          {!search.active && roots.length === 0 && owned.length === 0 && !creating && <p className="px-2 py-4 text-sm text-muted-foreground">No sessions yet.</p>}
+          {!search.active && conversations.length === 0 && !creating && <p className="px-2 py-4 text-sm text-muted-foreground">No sessions yet.</p>}
         </nav>
         <div className="flex items-center gap-1 border-t border-border px-3 pt-2 pb-[max(0.5rem,env(safe-area-inset-bottom))] text-xs text-muted-foreground">
           <span className="min-w-0 flex-1 truncate" title={host.url}>
@@ -282,7 +297,7 @@ function Workspace({ client, host, status, onDisconnect }: WorkspaceProps) {
 
 function SessionRow({ c, title, activity, active, onClick }: { c: Conversation; title: string; activity?: Activity; active: boolean; onClick: () => void }) {
   return (
-    <button onClick={onClick} className={`flex w-full flex-col rounded-md px-2 py-2 text-left ${active ? "rule-l bg-accent" : "border-l-2 border-transparent hover:bg-accent/60"}`}>
+    <button onClick={onClick} className={`flex w-full min-w-0 flex-col rounded-md px-2 py-2 text-left ${active ? "rule-l bg-accent" : "border-l-2 border-transparent hover:bg-accent/60"}`}>
       <span className="flex items-center gap-2 text-sm">
         <FolderOpen className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
         <span className="truncate text-[0.8rem]">{shortPath(title)}</span>

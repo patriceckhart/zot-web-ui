@@ -52,6 +52,20 @@ Open the UI, add the host URL and the web token, and open a workspace (for examp
 zot --continuous ~/.zot-store/host.sock --continuous-workspace main
 ```
 
+## Subagents
+
+The sidebar nests subagent conversations under the conversation that created them,
+including children of subagents. Use the arrow beside a parent to collapse or
+expand its children. All branches start expanded, and expansion state lasts until
+you disconnect or reload. Click any conversation to open its transcript. Model
+and activity indicators remain visible on each row.
+
+The list refreshes every 15 seconds. Search results stay flat so matching children
+remain accessible even when their parent is collapsed. If a parent is absent from
+the loaded list, its child appears at the top level. Forks remain separate top-level
+conversations. This display uses existing host ownership metadata and requires no
+host configuration changes.
+
 ## Security
 
 - The web token grants full control of the agent on your Mac, including shell tools. Treat it like an SSH key.
