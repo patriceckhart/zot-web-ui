@@ -1,7 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ChevronDown, ChevronRight, FolderOpen, LogOut, PanelLeftClose, PanelLeftOpen, Plus, Search, X } from "lucide-react";
+import { ArrowLeftRight, Check, ChevronDown, ChevronRight, Copy, FolderOpen, LogOut, PanelLeftClose, PanelLeftOpen, Pencil, Plus, RotateCcw, Search, Server, SquareTerminal, X } from "lucide-react";
+import dynamic from "next/dynamic";
 import { conversationRows } from "@/lib/conversation-tree";
 import { HostClient } from "@/lib/client";
 import type { Conversation, ConversationSnapshot, HostModel, RuntimeStatus, Submission } from "@/lib/protocol";
@@ -15,9 +16,18 @@ import {
   saveActiveHost,
   saveHosts,
   saveLabel,
+  loadTerminal,
+  saveTerminal,
+  loadWidth,
+  saveWidth,
+  loadNames,
+  saveName,
   type HostProfile,
+  type TerminalProfile,
 } from "@/lib/storage";
 import { ConnectScreen } from "./connect";
+import { ResizeHandle } from "./resize-handle";
+import { ContextMenu } from "./context-menu";
 import { Composer, type Draft } from "./composer";
 import { AnimatedZ } from "./animated-z";
 import { Transcript } from "./transcript";
@@ -27,6 +37,9 @@ import { WorkingSpinner } from "./working-spinner";
 import { useConversationSearch } from "@/lib/use-search";
 import { activityOf, useActivity, type Activity } from "@/lib/use-activity";
 import { ActivityBadge } from "./activity-badge";
+
+// xterm needs the browser, so the terminal is loaded on demand.
+const TerminalView = dynamic(() => import("./terminal-view").then((m) => m.TerminalView), { ssr: false });
 
 const REASONING = ["off", "minimum", "low", "medium", "high", "xhigh", "max"];
 
@@ -81,10 +94,15 @@ export function App() {
     saveActiveHost(null);
   };
 
+  // Adding a host returns to the connect screen with the form open.
+  const [addHost, setAddHost] = useState(false);
+
   if (!ready) return null;
   if (!client || !host) {
     return (
       <ConnectScreen
+        key={addHost ? "add" : "list"}
+        startAdding={addHost}
         hosts={hosts}
         error={connectError}
         connecting={connecting}
@@ -96,20 +114,67 @@ export function App() {
       />
     );
   }
-  return <Workspace key={host.id} client={client} host={host} status={status} onDisconnect={disconnect} />;
+  return (
+    <Workspace
+      key={host.id}
+      client={client}
+      host={host}
+      hosts={hosts}
+      status={status}
+      onDisconnect={() => {
+        setAddHost(false);
+        disconnect();
+      }}
+      onSwitch={(h) => {
+        // Close the current connection without reporting it as a failure.
+        const old = client;
+        setClient(null);
+        setHost(null);
+        old.close();
+        void connect(h);
+      }}
+      onAddHost={() => {
+        setAddHost(true);
+        disconnect();
+      }}
+    />
+  );
 }
 
 type WorkspaceProps = {
   client: HostClient;
   host: HostProfile;
+  hosts: HostProfile[];
   status: RuntimeStatus | null;
   onDisconnect: () => void;
+  onSwitch: (h: HostProfile) => void;
+  onAddHost: () => void;
 };
 
-function Workspace({ client, host, status, onDisconnect }: WorkspaceProps) {
+function Workspace({ client, host, hosts, status, onDisconnect, onSwitch, onAddHost }: WorkspaceProps) {
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [labels, setLabels] = useState<Record<string, string>>({});
+  // User-chosen names, persisted per host URL in this browser.
+  const [names, setNames] = useState<Record<string, string>>({});
+  const [renaming, setRenaming] = useState<string | null>(null);
+  const [rowMenu, setRowMenu] = useState<{ id: string; x: number; y: number } | null>(null);
+  const [hostMenu, setHostMenu] = useState<{ x: number; y: number } | null>(null);
   const [active, setActive] = useState<string | null>(null);
+  // Terminals by conversation ID. An entry keeps its shell mounted (and
+  // running) while other conversations are shown; visible controls the panel.
+  const [terminals, setTerminals] = useState<Record<string, { visible: boolean }>>({});
+  const [terminalSettings, setTerminalSettings] = useState<TerminalProfile | null>(() => loadTerminal(host.id));
+  // Desktop widths of the side panels in pixels; phones use full-width overlays.
+  const [sidebarWidth, setSidebarWidth] = useState(() => loadWidth("sidebar", 288));
+  const [terminalWidth, setTerminalWidth] = useState(() => loadWidth("terminal", 640));
+  const resizeSidebar = (w: number) => {
+    setSidebarWidth(w);
+    saveWidth("sidebar", w);
+  };
+  const resizeTerminal = (w: number) => {
+    setTerminalWidth(w);
+    saveWidth("terminal", w);
+  };
   // Live state of the open chat, reported by ChatView from its watch.
   const [liveActivity, setLiveActivity] = useState<{ id: string; activity: Activity } | null>(null);
   const [sidebar, setSidebar] = useState(true);
@@ -139,11 +204,12 @@ function Workspace({ client, host, status, onDisconnect }: WorkspaceProps) {
   useEffect(() => {
     /* eslint-disable-next-line react-hooks/set-state-in-effect */
     setLabels(loadLabels());
+    setNames(loadNames(host.url));
     if (window.innerWidth < 768) setSidebar(false);
     void refresh();
     const t = setInterval(refresh, 15000);
     return () => clearInterval(t);
-  }, [refresh]);
+  }, [refresh, host.url]);
 
   const open = async (workspace: string) => {
     const name = workspace.trim();
@@ -157,7 +223,13 @@ function Workspace({ client, host, status, onDisconnect }: WorkspaceProps) {
     void refresh();
   };
 
-  const title = (c: Conversation) => labels[c.id] ?? (c.owner ? `subagent ${c.id.slice(0, 8)}` : c.parent ? `fork ${c.id.slice(0, 8)}` : `conversation ${c.id.slice(0, 8)}`);
+  const rename = (id: string, name: string) => {
+    saveName(host.url, id, name);
+    setNames(loadNames(host.url));
+    setRenaming(null);
+  };
+
+  const title = (c: Conversation) => names[c.id] ?? labels[c.id] ?? (c.owner ? `subagent ${c.id.slice(0, 8)}` : c.parent ? `fork ${c.id.slice(0, 8)}` : `conversation ${c.id.slice(0, 8)}`);
 
   const rows = useMemo(() => conversationRows(conversations, collapsed), [conversations, collapsed]);
   const toggleChildren = (id: string) => {
@@ -174,6 +246,14 @@ function Workspace({ client, host, status, onDisconnect }: WorkspaceProps) {
   // Name matches are found locally; content matches come from the host.
   const q = filter.trim().toLowerCase();
   const nameMatches = search.active ? conversations.filter((c) => title(c).toLowerCase().includes(q) && !search.matches.some((m) => m.conversation.id === c.id)) : [];
+  const setTerminalVisible = (id: string, visible: boolean) => setTerminals((t) => ({ ...t, [id]: { visible } }));
+  const closeTerminal = (id: string) =>
+    setTerminals((t) => {
+      const next = { ...t };
+      delete next[id];
+      return next;
+    });
+
   const pick = (id: string) => {
     setActive(id);
     if (window.innerWidth < 768) setSidebar(false);
@@ -183,13 +263,21 @@ function Workspace({ client, host, status, onDisconnect }: WorkspaceProps) {
     <div className="fixed inset-0 flex overflow-hidden pr-[env(safe-area-inset-right)]">
       {sidebar && <div className="fixed inset-0 z-20 bg-black/50 md:hidden" onClick={() => setSidebar(false)} />}
       <aside
-        className={`fixed inset-y-0 left-0 z-30 flex w-[calc(18rem+env(safe-area-inset-left))] max-w-[85vw] flex-col border-r border-border bg-sidebar pt-[var(--top-inset)] pl-[env(safe-area-inset-left)] transition-transform md:static md:z-auto ${sidebar ? "translate-x-0" : "-translate-x-full md:hidden"}`}
+        style={{ "--sidebar-w": `${sidebarWidth}px` } as React.CSSProperties}
+        className={`fixed inset-y-0 left-0 z-30 flex w-[calc(18rem+env(safe-area-inset-left))] max-w-[85vw] flex-col border-r border-border bg-sidebar pt-[var(--top-inset)] pl-[env(safe-area-inset-left)] transition-transform md:relative md:z-auto md:w-[var(--sidebar-w)] md:max-w-none md:shrink-0 ${sidebar ? "translate-x-0" : "-translate-x-full md:hidden"}`}
       >
+        <ResizeHandle edge="right" width={sidebarWidth} min={200} max={() => Math.min(560, window.innerWidth * 0.4)} label="Resize sidebar" onResize={resizeSidebar} />
         <div className="flex items-center gap-2 px-4 py-4">
           <AnimatedZ width={24} height={24} />
           <div className="flex-1" />
-          <button className="flex items-center gap-1.5 rounded px-2 py-1 text-sm text-muted-foreground hover:text-foreground" onClick={() => setCreating(true)}>
-            <Plus className="h-4 w-4" /> new session
+          <button
+            className="flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded px-2 py-1 text-sm text-muted-foreground hover:text-foreground"
+            aria-label="New session"
+            title="New session"
+            onClick={() => setCreating(true)}
+          >
+            <Plus className="h-4 w-4" />
+            {sidebarWidth >= 260 && <span>new session</span>}
           </button>
           <button className="rounded p-1 text-muted-foreground hover:text-foreground" aria-label="Hide sidebar" onClick={() => setSidebar(false)}>
             <PanelLeftClose className="h-4 w-4" />
@@ -240,7 +328,7 @@ function Workspace({ client, host, status, onDisconnect }: WorkspaceProps) {
                 </button>
               ))}
               {nameMatches.map((c) => (
-                <SessionRow key={c.id} c={c} title={title(c)} activity={activityFor(c.id)} active={active === c.id} onClick={() => pick(c.id)} />
+                <SessionRow key={c.id} c={c} title={title(c)} activity={activityFor(c.id)} active={active === c.id} onClick={() => pick(c.id)} onMenu={(x, y) => setRowMenu({ id: c.id, x, y })} />
               ))}
             </>
           ) : (
@@ -256,18 +344,40 @@ function Workspace({ client, host, status, onDisconnect }: WorkspaceProps) {
                     {collapsed.has(c.id) ? <ChevronRight className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
                   </button>
                 ) : <span className="w-5.5 shrink-0" />}
-                <SessionRow c={c} title={title(c)} activity={activityFor(c.id)} active={active === c.id} onClick={() => pick(c.id)} />
+                {renaming === c.id ? (
+                  <RenameRow initial={names[c.id] ?? title(c)} onSave={(n) => rename(c.id, n)} onCancel={() => setRenaming(null)} />
+                ) : (
+                  <SessionRow
+                    c={c}
+                    title={title(c)}
+                    activity={activityFor(c.id)}
+                    active={active === c.id}
+                    onClick={() => pick(c.id)}
+                    onMenu={(x, y) => setRowMenu({ id: c.id, x, y })}
+                  />
+                )}
               </div>
             ))
           )}
           {!search.active && conversations.length === 0 && !creating && <p className="px-2 py-4 text-sm text-muted-foreground">No sessions yet.</p>}
         </nav>
         <div className="flex items-center gap-1 border-t border-border px-3 pt-2 pb-[max(0.5rem,env(safe-area-inset-bottom))] text-xs text-muted-foreground">
-          <span className="min-w-0 flex-1 truncate" title={host.url}>
-            <span className="mr-1.5 inline-block h-1.5 w-1.5 rounded-full bg-success align-middle" />
-            {host.name}
-            {status?.version ? ` (${status.version})` : ""}
-          </span>
+          <button
+            className="flex min-w-0 flex-1 items-center gap-1.5 rounded px-1 py-1 text-left hover:bg-accent hover:text-foreground"
+            title={`${host.url}\nSwitch or add hosts`}
+            aria-haspopup="menu"
+            onClick={(e) => {
+              const r = e.currentTarget.getBoundingClientRect();
+              setHostMenu({ x: r.left, y: r.top });
+            }}
+          >
+            <span className="inline-block h-1.5 w-1.5 shrink-0 rounded-full bg-success" />
+            <span className="truncate">
+              {host.name}
+              {status?.version ? ` (${status.version})` : ""}
+            </span>
+            <ArrowLeftRight className="ml-auto h-3.5 w-3.5 shrink-0" />
+          </button>
           <button className="rounded p-1.5 hover:text-foreground" aria-label="Disconnect" title="Disconnect" onClick={onDisconnect}>
             <LogOut className="h-4 w-4" />
           </button>
@@ -287,18 +397,86 @@ function Workspace({ client, host, status, onDisconnect }: WorkspaceProps) {
             sidebarOpen={sidebar}
             onMenu={() => setSidebar((s) => !s)}
             onActivity={setLiveActivity}
+            terminalOpen={!!terminals[active]?.visible}
+            onTerminal={() => setTerminalVisible(active, !terminals[active]?.visible)}
           />
         ) : (
           <Landing sidebarOpen={sidebar} onMenu={() => setSidebar((s) => !s)} onOpen={open} />
         )}
       </main>
+      {rowMenu && (
+        <ContextMenu
+          x={rowMenu.x}
+          y={rowMenu.y}
+          label="Conversation"
+          onDismiss={() => setRowMenu(null)}
+          items={[
+            { label: "Rename", icon: <Pencil className="h-4 w-4 text-muted-foreground" />, run: () => setRenaming(rowMenu.id) },
+            {
+              label: "Reset name",
+              icon: <RotateCcw className="h-4 w-4 text-muted-foreground" />,
+              run: () => rename(rowMenu.id, ""),
+              disabled: !names[rowMenu.id],
+            },
+            "separator",
+            { label: "Copy ID", icon: <Copy className="h-4 w-4 text-muted-foreground" />, run: () => void navigator.clipboard?.writeText(rowMenu.id) },
+          ]}
+        />
+      )}
+      {hostMenu && (
+        <ContextMenu
+          x={hostMenu.x}
+          y={hostMenu.y - 8}
+          label="Hosts"
+          onDismiss={() => setHostMenu(null)}
+          items={[
+            ...hosts.map((h) => ({
+              label: h.name,
+              icon: h.id === host.id ? <Check className="h-4 w-4 text-zot" /> : <Server className="h-4 w-4 text-muted-foreground" />,
+              run: () => h.id !== host.id && onSwitch(h),
+            })),
+            "separator" as const,
+            { label: "Add host", icon: <Plus className="h-4 w-4 text-muted-foreground" />, run: onAddHost },
+            { label: "Disconnect", icon: <LogOut className="h-4 w-4 text-muted-foreground" />, run: onDisconnect },
+          ]}
+        />
+      )}
+      {Object.entries(terminals).map(([id, t]) => {
+        const shown = id === active && t.visible;
+        return (
+          <aside
+            key={id}
+            aria-label="Terminal"
+            hidden={!shown}
+            style={{ "--terminal-w": `${terminalWidth}px` } as React.CSSProperties}
+            className="fixed inset-0 z-40 flex flex-col border-l border-border bg-background pr-[env(safe-area-inset-right)] md:relative md:inset-auto md:z-auto md:w-[min(var(--terminal-w),calc(100vw-20rem))] md:shrink-0 md:pr-0"
+          >
+            <ResizeHandle edge="left" width={terminalWidth} min={280} max={() => window.innerWidth - 320 - (sidebar ? sidebarWidth : 0)} label="Resize terminal" onResize={resizeTerminal} />
+            <TerminalView
+              settings={terminalSettings}
+              onSettings={(s) => {
+                saveTerminal(host.id, s);
+                setTerminalSettings(s);
+              }}
+              onHide={() => setTerminalVisible(id, false)}
+              onClose={() => closeTerminal(id)}
+            />
+          </aside>
+        );
+      })}
     </div>
   );
 }
 
-function SessionRow({ c, title, activity, active, onClick }: { c: Conversation; title: string; activity?: Activity; active: boolean; onClick: () => void }) {
+function SessionRow({ c, title, activity, active, onClick, onMenu }: { c: Conversation; title: string; activity?: Activity; active: boolean; onClick: () => void; onMenu: (x: number, y: number) => void }) {
   return (
-    <button onClick={onClick} className={`flex w-full min-w-0 flex-col rounded-md px-2 py-2 text-left ${active ? "rule-l bg-accent" : "border-l-2 border-transparent hover:bg-accent/60"}`}>
+    <button
+      onClick={onClick}
+      onContextMenu={(e) => {
+        e.preventDefault();
+        onMenu(e.clientX, e.clientY);
+      }}
+      className={`flex w-full min-w-0 flex-col rounded-md px-2 py-2 text-left ${active ? "rule-l bg-accent" : "border-l-2 border-transparent hover:bg-accent/60"}`}>
       <span className="flex items-center gap-2 text-sm">
         <FolderOpen className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
         <span className="truncate text-[0.8rem]">{shortPath(title)}</span>
@@ -308,6 +486,32 @@ function SessionRow({ c, title, activity, active, onClick }: { c: Conversation; 
         <span className="ml-auto shrink-0">{activity && activity !== "idle" ? <ActivityBadge activity={activity} /> : relativeTime(c.created)}</span>
       </span>
     </button>
+  );
+}
+
+function RenameRow({ initial, onSave, onCancel }: { initial: string; onSave: (name: string) => void; onCancel: () => void }) {
+  const [value, setValue] = useState(initial);
+  return (
+    <form
+      className="flex w-full min-w-0 items-center gap-1 rounded-md bg-accent px-2 py-1.5"
+      onSubmit={(e) => {
+        e.preventDefault();
+        onSave(value);
+      }}
+    >
+      <Pencil className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+      <input
+        autoFocus
+        value={value}
+        onChange={(e) => setValue(e.target.value)}
+        onFocus={(e) => e.currentTarget.select()}
+        onKeyDown={(e) => e.key === "Escape" && onCancel()}
+        onBlur={() => onSave(value)}
+        maxLength={120}
+        aria-label="Conversation name"
+        className="min-w-0 flex-1 bg-transparent font-mono text-[0.8rem] outline-none"
+      />
+    </form>
   );
 }
 
@@ -368,7 +572,7 @@ function Landing({ sidebarOpen, onMenu, onOpen }: { sidebarOpen: boolean; onMenu
   );
 }
 
-function ChatView({ client, id, title, attachments, models, providers, sidebarOpen, onMenu, onActivity }: { client: HostClient; id: string; title: string; attachments: boolean; models: boolean; providers: boolean; sidebarOpen: boolean; onMenu: () => void; onActivity: (a: { id: string; activity: Activity } | null) => void }) {
+function ChatView({ client, id, title, attachments, models, providers, sidebarOpen, onMenu, onActivity, terminalOpen, onTerminal }: { client: HostClient; id: string; title: string; attachments: boolean; models: boolean; providers: boolean; sidebarOpen: boolean; onMenu: () => void; onActivity: (a: { id: string; activity: Activity } | null) => void; terminalOpen: boolean; onTerminal: () => void }) {
   const { state, error } = useConversation(client, id);
   const [actionError, setActionError] = useState("");
   const [modelOpen, setModelOpen] = useState(false);
@@ -430,6 +634,15 @@ function ChatView({ client, id, title, attachments, models, providers, sidebarOp
             {state?.queueHeld ? " (queue held after failure)" : ""}
           </div>
         </div>
+        <button
+          className={`rounded p-1 hover:text-foreground ${terminalOpen ? "text-zot" : "text-muted-foreground"}`}
+          aria-label={terminalOpen ? "Hide terminal" : "Show terminal"}
+          aria-pressed={terminalOpen}
+          title={terminalOpen ? "Hide terminal" : "Terminal"}
+          onClick={onTerminal}
+        >
+          <SquareTerminal className="h-4 w-4" />
+        </button>
       </header>
 
       <div

@@ -9,14 +9,16 @@ import { newID } from "@/lib/storage";
 
 type Props = {
   hosts: HostProfile[];
+  // startAdding opens the add-host form even when hosts exist.
+  startAdding?: boolean;
   error?: string;
   connecting: boolean;
   onConnect: (host: HostProfile) => void;
   onSave: (hosts: HostProfile[]) => void;
 };
 
-export function ConnectScreen({ hosts, error, connecting, onConnect, onSave }: Props) {
-  const [adding, setAdding] = useState(hosts.length === 0);
+export function ConnectScreen({ hosts, startAdding, error, connecting, onConnect, onSave }: Props) {
+  const [adding, setAdding] = useState(startAdding || hosts.length === 0);
   const [name, setName] = useState("");
   const [url, setUrl] = useState("");
   const [token, setToken] = useState("");

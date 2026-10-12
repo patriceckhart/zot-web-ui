@@ -12,6 +12,7 @@ export type HostProfile = {
 const HOSTS = "zot-hosts";
 const ACTIVE = "zot-active-host";
 const LABELS = "zot-labels";
+const TERMINALS = "zot-terminals";
 
 function read<T>(key: string, fallback: T): T {
   if (typeof window === "undefined") return fallback;
@@ -56,6 +57,72 @@ export function loadLabels(): Record<string, string> {
 
 export function saveLabel(conversationID: string, label: string) {
   write(LABELS, { ...loadLabels(), [conversationID]: label });
+}
+
+// Conversation names chosen by the user. zot has no rename method, so names
+// live in this browser. They persist in localStorage (unlike tokens), keyed
+// by host URL so the same conversation ID on another host is not affected.
+const NAMES = "zot-names";
+
+function readNames(): Record<string, Record<string, string>> {
+  if (typeof window === "undefined") return {};
+  try {
+    const raw = window.localStorage.getItem(NAMES);
+    const v = raw ? JSON.parse(raw) : {};
+    return v && typeof v === "object" ? v : {};
+  } catch {
+    return {};
+  }
+}
+
+export function loadNames(hostURL: string): Record<string, string> {
+  return readNames()[hostURL] ?? {};
+}
+
+// saveName stores a name; an empty name removes it.
+export function saveName(hostURL: string, conversationID: string, name: string) {
+  const all = readNames();
+  const names = { ...(all[hostURL] ?? {}) };
+  const trimmed = name.trim();
+  if (trimmed) names[conversationID] = trimmed;
+  else delete names[conversationID];
+  all[hostURL] = names;
+  try {
+    window.localStorage.setItem(NAMES, JSON.stringify(all));
+  } catch {
+    // Not persisted; the name lasts for the page lifetime.
+  }
+}
+
+// Panel widths are layout preferences, not credentials, so they persist in
+// localStorage across sessions.
+export function loadWidth(key: string, fallback: number): number {
+  if (typeof window === "undefined") return fallback;
+  try {
+    const v = Number(window.localStorage.getItem(`zot-width-${key}`));
+    return Number.isFinite(v) && v > 0 ? v : fallback;
+  } catch {
+    return fallback;
+  }
+}
+
+export function saveWidth(key: string, width: number) {
+  try {
+    window.localStorage.setItem(`zot-width-${key}`, String(Math.round(width)));
+  } catch {
+    // Not persisted; the width lasts for the page lifetime.
+  }
+}
+
+// Terminal bridge settings (zotty URL and token) per host profile ID.
+export type TerminalProfile = { url: string; token: string };
+
+export function loadTerminal(hostID: string): TerminalProfile | null {
+  return read<Record<string, TerminalProfile>>(TERMINALS, {})[hostID] ?? null;
+}
+
+export function saveTerminal(hostID: string, profile: TerminalProfile) {
+  write(TERMINALS, { ...read<Record<string, TerminalProfile>>(TERMINALS, {}), [hostID]: profile });
 }
 
 export function newID(): string {
