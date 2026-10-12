@@ -146,3 +146,7 @@ zot continuous serve --store ~/.zot-store --web 127.0.0.1:7787
 bun run dev        # http://localhost:3000, host URL ws://127.0.0.1:7787
 bun run typecheck && bun run lint && bun test && bun run build
 ```
+
+## License
+
+MIT
