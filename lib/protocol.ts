@@ -17,6 +17,7 @@ export type AgentConfig = {
 
 export type Conversation = {
   id: string;
+  title?: string;
   created: string;
   revision: number;
   config: AgentConfig;
@@ -156,7 +157,7 @@ export type ConversationSnapshot = {
 };
 
 export type ViewOp = {
-  doc: "execution" | "queue" | "usage" | "agent" | "provider" | "entries" | "partial" | "progress" | "approvals";
+  doc: "execution" | "queue" | "usage" | "metadata" | "agent" | "provider" | "entries" | "partial" | "progress" | "approvals";
   op: "put" | "delete";
   key?: string;
   value?: unknown;

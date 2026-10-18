@@ -20,6 +20,7 @@ import type {
 
 export type ConversationState = {
   id: string;
+  title?: string;
   revision: number;
   config: AgentConfig;
   entries: Map<number, Entry>;
@@ -47,6 +48,7 @@ export function fromSnapshot(s: ConversationSnapshot): ConversationState {
   list.forEach((e, i) => entries.set(first + i, e));
   return {
     id: s.conversation.id,
+    title: s.conversation.title,
     revision: s.revision,
     config: s.conversation.config,
     entries,
@@ -141,6 +143,9 @@ export function applyChange(state: ConversationState, change: ViewChange): Conve
         }
         break;
       }
+      case "metadata":
+        if (!del) next.title = (op.value as { title: string }).title;
+        break;
       case "agent":
         if (!del) next.config = op.value as AgentConfig;
         break;

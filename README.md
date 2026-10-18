@@ -2,7 +2,7 @@
 
 A browser client for `zot continuous`. It lists sessions, opens workspaces, streams answers, shows tool calls, steers or queues messages, stops runs, decides approvals, attaches images and files, and changes model and reasoning.
 
-The UI is a static Next.js export with no server code, made to be deployed on Vercel. Host URLs and tokens (zot and zotty) are kept only in the tab's `sessionStorage` and are sent only to the host you enter. Conversation names and panel widths are kept in `localStorage`.
+The UI is a static Next.js export with no server code, made to be deployed on Vercel. Host URLs and tokens (zot and zotty) are kept only in the tab's `sessionStorage` and are sent only to the host you enter. Conversation titles are persisted on the zot host alongside their stable IDs. Panel widths are kept in `localStorage`.
 
 ```
 browser (anywhere)  --wss-->  tailscale / cloudflared  -->  zot continuous serve --web (your Mac)
@@ -84,7 +84,7 @@ Host URL: `wss://<random>.trycloudflare.com`. Terminal URL: `wss://<random>.tryc
 
 ## Conversations and hosts
 
-- Right-click a conversation to rename it, reset its name, or copy its ID. Names are kept in this browser's `localStorage` per host URL, because zot has no rename method. They do not sync between devices, and they no longer match if the host URL changes.
+- Right-click a conversation to rename it, reset its title, or copy its ID. Press Enter or click the check button to save, Escape or the cancel button to cancel. Titles are stored by the host for file journal, SQLite, and PostgreSQL backends, so they survive restarts and are shared between devices. Titles are trimmed and limited to 120 characters. Saving requires a host with `conversation.rename` support and a submit-capable token. Errors leave the edit open rather than silently saving a browser-only name. The open chat receives title updates through its watch, the sidebar refreshes every 15 seconds. Old browser-only aliases remain a fallback on older hosts, they are not automatically imported into upgraded hosts.
 - Click the host name at the bottom of the sidebar to switch between saved hosts, add a host, or disconnect.
 
 ## Switching providers and models
@@ -132,7 +132,7 @@ host configuration changes.
 
 ## Limitations
 
-- The host stores workspace names hashed. Names opened in this browser session are remembered, other conversations show as `conversation <id>`.
+- The host stores workspace identities hashed. Untitled conversations use workspace labels remembered in this browser session or an ID-based fallback. Renaming a conversation changes only its display title, not its workspace identity or ID.
 - The newest 400 entries of a conversation are loaded.
 - The model picker uses the host's active catalog. It does not provide login flows or live model discovery controls. Older hosts only allow models from their configured provider.
 - No file browser. The host protocol does not expose it.

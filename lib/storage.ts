@@ -59,9 +59,9 @@ export function saveLabel(conversationID: string, label: string) {
   write(LABELS, { ...loadLabels(), [conversationID]: label });
 }
 
-// Conversation names chosen by the user. zot has no rename method, so names
-// live in this browser. They persist in localStorage (unlike tokens), keyed
-// by host URL so the same conversation ID on another host is not affected.
+// Legacy browser-only conversation aliases, used as a fallback for older
+// hosts that do not return titles. New titles are persisted through the host's
+// conversation.rename method. Keep old aliases until a rename is acknowledged.
 const NAMES = "zot-names";
 
 function readNames(): Record<string, Record<string, string>> {

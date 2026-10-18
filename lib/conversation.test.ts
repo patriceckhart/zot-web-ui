@@ -12,6 +12,18 @@ const base: ConversationSnapshot = {
 };
 
 describe("conversation state", () => {
+  test("titles survive snapshots, watch changes, clears, and replay", () => {
+    const initial = fromSnapshot({ ...base, conversation: { ...base.conversation, title: "Initial" } });
+    expect(initial.title).toBe("Initial");
+    const renamed = applyChange(initial, { revision: 6, ops: [{ doc: "metadata", op: "put", value: { title: "Renamed" } }] });
+    expect(renamed.title).toBe("Renamed");
+    expect(initial.title).toBe("Initial");
+    const cleared = applyChange(renamed, { revision: 7, ops: [{ doc: "metadata", op: "put", value: { title: "" } }] });
+    expect(cleared.title).toBe("");
+    expect(applyChange(cleared, { revision: 6, ops: [{ doc: "metadata", op: "put", value: { title: "Stale" } }] })).toBe(cleared);
+    expect(fromSnapshot(base).title).toBeUndefined();
+  });
+
   test("snapshot with null slices", () => {
     const s = fromSnapshot(base);
     expect(s.entries.size).toBe(0);

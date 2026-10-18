@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ArrowLeftRight, Check, ChevronDown, ChevronRight, Copy, FolderOpen, LogOut, PanelLeftClose, PanelLeftOpen, Pencil, Plus, RotateCcw, Search, Server, SquareTerminal, X } from "lucide-react";
 import dynamic from "next/dynamic";
 import { conversationRows } from "@/lib/conversation-tree";
+import { conversationTitle, renameConversation } from "@/lib/titles";
 import { HostClient } from "@/lib/client";
 import type { Conversation, ConversationSnapshot, HostModel, RuntimeStatus, Submission } from "@/lib/protocol";
 import { buildItems, formatTokens, isBusy, shortPath } from "@/lib/conversation";
@@ -154,7 +155,7 @@ type WorkspaceProps = {
 function Workspace({ client, host, hosts, status, onDisconnect, onSwitch, onAddHost }: WorkspaceProps) {
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [labels, setLabels] = useState<Record<string, string>>({});
-  // User-chosen names, persisted per host URL in this browser.
+  // Legacy browser-only names remain visible when connected to older hosts.
   const [names, setNames] = useState<Record<string, string>>({});
   const [renaming, setRenaming] = useState<string | null>(null);
   const [rowMenu, setRowMenu] = useState<{ id: string; x: number; y: number } | null>(null);
@@ -223,13 +224,16 @@ function Workspace({ client, host, hosts, status, onDisconnect, onSwitch, onAddH
     void refresh();
   };
 
-  const rename = (id: string, name: string) => {
-    saveName(host.url, id, name);
+  const rename = async (id: string, name: string) => {
+    const updated = await renameConversation(client, id, name);
+    setConversations((current) => current.map((c) => c.id === id ? updated : c));
+    // Remove the old browser alias only after the host acknowledges the title.
+    saveName(host.url, id, "");
     setNames(loadNames(host.url));
     setRenaming(null);
   };
 
-  const title = (c: Conversation) => names[c.id] ?? labels[c.id] ?? (c.owner ? `subagent ${c.id.slice(0, 8)}` : c.parent ? `fork ${c.id.slice(0, 8)}` : `conversation ${c.id.slice(0, 8)}`);
+  const title = (c: Conversation) => conversationTitle(c, labels[c.id], names[c.id]);
 
   const rows = useMemo(() => conversationRows(conversations, collapsed), [conversations, collapsed]);
   const toggleChildren = (id: string) => {
@@ -258,6 +262,7 @@ function Workspace({ client, host, hosts, status, onDisconnect, onSwitch, onAddH
     setActive(id);
     if (window.innerWidth < 768) setSidebar(false);
   };
+  const activeConversation = conversations.find((c) => c.id === active);
 
   return (
     <div className="fixed inset-0 flex overflow-hidden pr-[env(safe-area-inset-right)]">
@@ -345,7 +350,7 @@ function Workspace({ client, host, hosts, status, onDisconnect, onSwitch, onAddH
                   </button>
                 ) : <span className="w-5.5 shrink-0" />}
                 {renaming === c.id ? (
-                  <RenameRow initial={names[c.id] ?? title(c)} onSave={(n) => rename(c.id, n)} onCancel={() => setRenaming(null)} />
+                  <RenameRow initial={title(c)} onSave={(n) => rename(c.id, n)} onCancel={() => setRenaming(null)} />
                 ) : (
                   <SessionRow
                     c={c}
@@ -390,7 +395,8 @@ function Workspace({ client, host, hosts, status, onDisconnect, onSwitch, onAddH
             key={active}
             client={client}
             id={active}
-            title={conversations.find((c) => c.id === active) ? title(conversations.find((c) => c.id === active)!) : active.slice(0, 8)}
+            title={activeConversation ? title(activeConversation) : active.slice(0, 8)}
+            fallbackTitle={activeConversation ? conversationTitle({ ...activeConversation, title: "" }, labels[active]) : `conversation ${active.slice(0, 8)}`}
             attachments={!!status?.capabilities?.attachments}
             models={!!status?.capabilities?.models}
             providers={!!status?.capabilities?.providers}
@@ -415,8 +421,8 @@ function Workspace({ client, host, hosts, status, onDisconnect, onSwitch, onAddH
             {
               label: "Reset name",
               icon: <RotateCcw className="h-4 w-4 text-muted-foreground" />,
-              run: () => rename(rowMenu.id, ""),
-              disabled: !names[rowMenu.id],
+              run: () => void rename(rowMenu.id, "").catch((err) => setListError((err as Error).message)),
+              disabled: !conversations.find((c) => c.id === rowMenu.id)?.title && !names[rowMenu.id],
             },
             "separator",
             { label: "Copy ID", icon: <Copy className="h-4 w-4 text-muted-foreground" />, run: () => void navigator.clipboard?.writeText(rowMenu.id) },
@@ -489,14 +495,28 @@ function SessionRow({ c, title, activity, active, onClick, onMenu }: { c: Conver
   );
 }
 
-function RenameRow({ initial, onSave, onCancel }: { initial: string; onSave: (name: string) => void; onCancel: () => void }) {
+function RenameRow({ initial, onSave, onCancel }: { initial: string; onSave: (name: string) => Promise<void>; onCancel: () => void }) {
   const [value, setValue] = useState(initial);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+  const pending = useRef(false);
   return (
     <form
       className="flex w-full min-w-0 items-center gap-1 rounded-md bg-accent px-2 py-1.5"
-      onSubmit={(e) => {
+      onSubmit={async (e) => {
         e.preventDefault();
-        onSave(value);
+        if (pending.current) return;
+        pending.current = true;
+        setSaving(true);
+        setError("");
+        try {
+          await onSave(value);
+        } catch (err) {
+          setError((err as Error).message);
+        } finally {
+          pending.current = false;
+          setSaving(false);
+        }
       }}
     >
       <Pencil className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
@@ -505,12 +525,15 @@ function RenameRow({ initial, onSave, onCancel }: { initial: string; onSave: (na
         value={value}
         onChange={(e) => setValue(e.target.value)}
         onFocus={(e) => e.currentTarget.select()}
-        onKeyDown={(e) => e.key === "Escape" && onCancel()}
-        onBlur={() => onSave(value)}
+        onKeyDown={(e) => e.key === "Escape" && !saving && onCancel()}
+        disabled={saving}
         maxLength={120}
-        aria-label="Conversation name"
+        aria-label="Conversation title"
         className="min-w-0 flex-1 bg-transparent font-mono text-[0.8rem] outline-none"
       />
+      <button type="submit" disabled={saving} aria-label="Save title" className="rounded p-1 hover:text-zot disabled:opacity-50"><Check className="h-3.5 w-3.5" /></button>
+      <button type="button" disabled={saving} onClick={onCancel} aria-label="Cancel rename" className="rounded p-1 hover:text-foreground disabled:opacity-50"><X className="h-3.5 w-3.5" /></button>
+      {error && <span role="alert" className="text-xs text-destructive">{error}</span>}
     </form>
   );
 }
@@ -572,7 +595,7 @@ function Landing({ sidebarOpen, onMenu, onOpen }: { sidebarOpen: boolean; onMenu
   );
 }
 
-function ChatView({ client, id, title, attachments, models, providers, sidebarOpen, onMenu, onActivity, terminalOpen, onTerminal }: { client: HostClient; id: string; title: string; attachments: boolean; models: boolean; providers: boolean; sidebarOpen: boolean; onMenu: () => void; onActivity: (a: { id: string; activity: Activity } | null) => void; terminalOpen: boolean; onTerminal: () => void }) {
+function ChatView({ client, id, title, fallbackTitle, attachments, models, providers, sidebarOpen, onMenu, onActivity, terminalOpen, onTerminal }: { client: HostClient; id: string; title: string; fallbackTitle: string; attachments: boolean; models: boolean; providers: boolean; sidebarOpen: boolean; onMenu: () => void; onActivity: (a: { id: string; activity: Activity } | null) => void; terminalOpen: boolean; onTerminal: () => void }) {
   const { state, error } = useConversation(client, id);
   const [actionError, setActionError] = useState("");
   const [modelOpen, setModelOpen] = useState(false);
@@ -628,7 +651,7 @@ function ChatView({ client, id, title, attachments, models, providers, sidebarOp
       <header className="flex items-center gap-3 border-b border-border px-4 pb-3 pt-[max(0.75rem,var(--top-inset))]">
         <SidebarToggle open={sidebarOpen} onClick={onMenu} />
         <div className="min-w-0 flex-1">
-          <div className="truncate font-mono text-sm font-medium">{shortPath(title)}</div>
+          <div className="truncate font-mono text-sm font-medium">{shortPath(state?.title === undefined ? title : state.title || fallbackTitle)}</div>
           <div className="truncate text-xs text-muted-foreground">
             {busy ? (state?.approvals.size ? "awaiting approval" : "working") : state?.queue.size ? `${state.queue.size} queued` : "idle"}
             {state?.queueHeld ? " (queue held after failure)" : ""}
